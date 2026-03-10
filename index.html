@@ -631,7 +631,7 @@
   const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw7_oAF-slbqn4T_IQJFdLf6ytMaxp73aKo0F1dIsMormckGdxnrtssaTp3ZFOuxTZgsQ/exec';
   // ================================================
 
-  const isDemo = SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_URL_HERE';
+  const isDemo = SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbw7_oAF-slbqn4T_IQJFdLf6ytMaxp73aKo0F1dIsMormckGdxnrtssaTp3ZFOuxTZgsQ/exec';
   if (isDemo) document.getElementById('config-banner').classList.add('show');
 
   // ---- SVG ICONS per category ----
@@ -661,20 +661,31 @@
   let cache = [];
   let loaded = false;
 
-  function demoData() {
-    return [
-      { id:'1', name:'Helping Hearts Youth Foundation', tagline:'Youth-led nonprofit creating community change', description:"Helping Hearts is Vancouver's leading youth-led non-profit organization, letting youth be the constant change they wish to see in their communities. From student clubs to community projects, we empower the next generation.", mission:'To empower youth to lead positive change in their communities.', categories:'Environment,Youth', location:'Vancouver downtown', neighborhood:'Vancouver downtown', website:'', instagram:'@helpingheartsbc', email:'info@helpingheartsbc.org', phone:'', address:'', facebook:'', twitter:'', linkedin:'', volunteer:'Join one of our 90+ school clubs, attend our workshops, or volunteer at community events.', coverImage:'', logoImage:'', created:String(Date.now()-10000) },
-      { id:'2', name:'YouthLink Photography', tagline:'A community for young photographers', description:'Youth Organization. Worldwide. A community for young photographers. Events | Competitions | Workshops. Sign up for Exposure 2026.', mission:'To connect young photographers worldwide and provide opportunities to grow their craft.', categories:'Youth,Community Services', location:'Vancouver, BC', neighborhood:'Vancouver, BC', website:'https://www.youthlinkphotography.org', instagram:'@youthlinkphotography', email:'', phone:'', address:'', facebook:'', twitter:'', linkedin:'', volunteer:'Sign up for Exposure 2026. Join our competitions, attend workshops, and connect with other young photographers.', coverImage:'', logoImage:'', created:String(Date.now()-5000) }
-    ];
-  }
-
   async function fetchData() {
-    if (isDemo) { cache = demoData(); loaded = true; return; }
+    if (isDemo) {
+      // No script URL set — show empty state, never fake data
+      cache = [];
+      loaded = true;
+      return;
+    }
     try {
       const res  = await fetch(`${SCRIPT_URL}?action=get`);
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const json = await res.json();
       cache = Array.isArray(json.data) ? json.data : [];
-    } catch(e) { console.error(e); cache = demoData(); }
+    } catch(e) {
+      console.error('Fetch error:', e);
+      cache = [];
+      // Show a visible error in the grids
+      const msg = `<div class="empty-state" style="color:#e05a5a;">
+        ⚠️ Could not load nonprofits. Check that your Apps Script URL is correct and the deployment is set to <strong>Anyone</strong>.<br><br>
+        <small style="color:var(--text-light);">${e.message}</small>
+      </div>`;
+      const fg = document.getElementById('featured-grid');
+      const bg = document.getElementById('browse-grid');
+      if (fg) fg.innerHTML = msg;
+      if (bg) bg.innerHTML = msg;
+    }
     loaded = true;
   }
 
@@ -747,7 +758,12 @@
     document.getElementById('browse-subtitle').textContent = `Explore ${cache.length} organization${cache.length!==1?'s':''} making a difference in Vancouver`;
     grid.innerHTML = cache.length
       ? cache.slice(0, 6).map(cardHTML).join('')
-      : `<div class="empty-state">No nonprofits yet — <button onclick="showPage('list')" style="color:var(--navy);font-weight:600;background:none;border:none;cursor:pointer;text-decoration:underline">be the first to list yours!</button></div>`;
+      : `<div class="empty-state">
+          ${isDemo
+            ? '⚠️ Connect your Google Sheets to display nonprofits. See <strong>SETUP.md</strong> for instructions.'
+            : 'No nonprofits listed yet — <button onclick="showPage(\'list\')" style="color:var(--navy);font-weight:600;background:none;border:none;cursor:pointer;text-decoration:underline">be the first to list yours!</button>'
+          }
+        </div>`;
     observeReveals();
   }
 
@@ -800,7 +816,9 @@
     document.getElementById('results-count').innerHTML = `Showing <strong>${filtered.length}</strong> nonprofit${filtered.length!==1?'s':''}`;
     document.getElementById('browse-grid').innerHTML = filtered.length
       ? filtered.map(cardHTML).join('')
-      : '<div class="empty-state">No nonprofits match your search. Try a different keyword or category.</div>';
+      : cache.length === 0
+        ? `<div class="empty-state">${isDemo ? '⚠️ Connect your Google Sheets to display nonprofits. See <strong>SETUP.md</strong>.' : 'No nonprofits listed yet — <button onclick="showPage(\'list\')" style="color:var(--navy);font-weight:600;background:none;border:none;cursor:pointer;text-decoration:underline">be the first!</button>'}</div>`
+        : '<div class="empty-state">No nonprofits match your search. Try a different keyword or category.</div>';
   }
 
   function cardHTML(n) {
@@ -931,15 +949,14 @@
     btn.disabled = true; btn.textContent = 'Submitting…';
 
     try {
-      if (!isDemo) {
-        const res  = await fetch(SCRIPT_URL, { method:'POST', body: JSON.stringify(payload) });
-        const json = await res.json();
-        if (json.status !== 'success') throw new Error(json.message || 'Server error');
-        loaded = false;
-        await fetchData();
-      } else {
-        cache.unshift(payload);
+      if (isDemo) {
+        throw new Error('No Apps Script URL set. Please follow SETUP.md to connect Google Sheets.');
       }
+      const res  = await fetch(SCRIPT_URL, { method:'POST', body: JSON.stringify(payload) });
+      const json = await res.json();
+      if (json.status !== 'success') throw new Error(json.message || 'Server error');
+      loaded = false;
+      await fetchData();
       resetForm();
       document.getElementById('success-modal').classList.add('show');
       document.body.style.overflow = 'hidden';
