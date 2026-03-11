@@ -112,7 +112,7 @@
     .hero-search button { background: var(--navy); color: white; border: none; padding: 1rem 1.8rem; font-weight: 600; font-size: 0.95rem; cursor: pointer; border-radius: 0 50px 50px 0; font-family: 'DM Sans', sans-serif; transition: background 0.2s; white-space: nowrap; flex-shrink: 0; }
     .hero-search button:hover { background: var(--navy-light); }
 
-    /* ===== STATS — animated counters ===== */
+    /* ===== STATS ===== */
     .stats-section {
       background: var(--navy);
       padding: 2rem 2rem 4rem;
@@ -365,21 +365,21 @@
         <div class="stat-icon">
           <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         </div>
-        <div class="stat-number"><span class="counter" data-target="nonprofits">0</span>+</div>
+        <div class="stat-number"><span id="stat-nonprofits">0</span>+</div>
         <div class="stat-label">Nonprofits</div>
       </div>
       <div class="stat">
         <div class="stat-icon">
           <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
         </div>
-        <div class="stat-number"><span class="counter" data-target="50">0</span>+</div>
+        <div class="stat-number">50+</div>
         <div class="stat-label">Categories</div>
       </div>
       <div class="stat">
         <div class="stat-icon">
           <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
-        <div class="stat-number"><span class="counter" data-target="10000">0</span>+</div>
+        <div class="stat-number">10,000+</div>
         <div class="stat-label">Volunteers Connected</div>
       </div>
     </div>
@@ -781,49 +781,6 @@
 
   // ---- COUNTER ANIMATION ----
   // Simple, reliable approach:
-  // 1. fetchData() always runs first (in initHome before observer starts)
-  // 2. Observer starts AFTER data is loaded — so cache.length is always correct
-  // 3. All 3 counters animate together the moment stats section enters view
-
-  function animateCounter(el, target) {
-    el.textContent = '0';
-    if (target === 0) return;
-    const duration = 1600;
-    const start = performance.now();
-    function step(now) {
-      const progress = Math.min((now - start) / duration, 1);
-      const eased    = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
-      el.textContent = Math.floor(eased * target).toLocaleString();
-      if (progress < 1) requestAnimationFrame(step);
-      else el.textContent = target.toLocaleString();
-    }
-    requestAnimationFrame(step);
-  }
-
-  function startAllCounters() {
-    document.querySelectorAll('.counter').forEach(el => {
-      const target = el.dataset.target === 'nonprofits'
-        ? cache.length
-        : parseInt(el.dataset.target, 10);
-      animateCounter(el, target);
-    });
-  }
-
-  // Observer is created fresh each time initHome() calls startCounterObserver()
-  // so it always fires exactly once per home visit with up-to-date data
-  let statsObserver = null;
-  function startCounterObserver() {
-    if (statsObserver) statsObserver.disconnect();
-    document.querySelectorAll('.counter').forEach(el => el.textContent = '0');
-    statsObserver = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        statsObserver.disconnect();
-        startAllCounters();
-      }
-    }, { threshold: 0.2 });
-    statsObserver.observe(document.querySelector('.stats-section'));
-  }
-
   // ---- NAVIGATION ----
   function showPage(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -858,9 +815,9 @@
             : 'No nonprofits listed yet — <button onclick="showPage(\'list\')" style="color:var(--navy);font-weight:600;background:none;border:none;cursor:pointer;text-decoration:underline">be the first to list yours!</button>'
           }
         </div>`;
+    const statEl = document.getElementById('stat-nonprofits');
+    if (statEl) statEl.textContent = cache.length.toLocaleString();
     observeReveals();
-    // Data is loaded — start observer now so all counters animate with correct values
-    startCounterObserver();
   }
 
   function doHeroSearch() {
