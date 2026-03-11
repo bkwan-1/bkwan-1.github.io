@@ -1019,7 +1019,7 @@
     let contact = '';
     if (n.email)   contact += `<div class="org-contact-item"><span class="org-contact-label">Email</span><span class="org-contact-value"><a href="mailto:${n.email}">${n.email}</a></span></div>`;
     if (n.phone)   contact += `<div class="org-contact-item"><span class="org-contact-label">Phone</span><span class="org-contact-value">${n.phone}</span></div>`;
-    if (n.website) contact += `<div class="org-contact-item"><span class="org-contact-label">Website</span><span class="org-contact-value"><a href="${n.website.startsWith('http')?n.website:'https://'+n.website}" target="_blank">Visit Website ↗</a></span></div>`;
+    if (n.website) contact += `<div class="org-contact-item"><span class="org-contact-label">Website</span><span class="org-contact-value"><a href="${n.website.startsWith('http')?n.website:'https://'+n.website}" target="_blank" onclick="trackClick('${(n.id||'').replace(/'/g,"\\'")}','${(n.name||'').replace(/'/g,"\\'")}')">Visit Website ↗</a></span></div>`;
     if (n.address) contact += `<div class="org-contact-item"><span class="org-contact-label">Address</span><span class="org-contact-value">${n.address}</span></div>`;
     document.getElementById('org-modal-contact').innerHTML = contact;
     document.getElementById('org-modal-contact-section').style.display = contact ? '' : 'none';
@@ -1043,11 +1043,19 @@
     const wbtn = document.getElementById('org-modal-website-btn');
     if (n.website && wbtn) {
       wbtn.href = n.website.startsWith('http') ? n.website : 'https://'+n.website;
+      wbtn.onclick = () => trackClick(n.id||'', n.name||'');
       wbtn.style.display = 'inline-flex';
     } else if (wbtn) { wbtn.style.display = 'none'; }
 
     document.getElementById('org-modal').classList.add('show');
     document.body.style.overflow = 'hidden';
+  }
+
+  // ---- CLICK TRACKING ----
+  function trackClick(orgId, orgName) {
+    if (isDemo || !SCRIPT_URL || SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_URL_HERE') return;
+    const url = `${SCRIPT_URL}?action=click&orgId=${encodeURIComponent(orgId)}&orgName=${encodeURIComponent(orgName)}`;
+    fetch(url).catch(() => {}); // fire-and-forget, silently ignore errors
   }
 
   function closeOrgModal() {
