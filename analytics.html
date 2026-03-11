@@ -360,9 +360,23 @@
     </div>
     <div class="pw-title">Dashboard Access</div>
     <div class="pw-sub">Vancouver Nonprofit Hub · Admin Only</div>
-    <input id="pw-input" class="pw-input" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkPassword()" autofocus />
+    <div style="text-align:left;margin-bottom:0.5rem;">
+      <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.35rem;">Apps Script URL</div>
+      <input id="url-input" class="pw-input" type="url" placeholder="https://script.google.com/macros/s/…/exec"
+        style="margin-bottom:0;letter-spacing:0;font-size:0.8rem;text-align:left;"
+        onkeydown="if(event.key==='Enter')document.getElementById('pw-input').focus()" />
+    </div>
+    <div style="text-align:left;margin-bottom:0.9rem;">
+      <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.35rem;">Password</div>
+      <input id="pw-input" class="pw-input" type="password" placeholder="Enter password"
+        style="margin-bottom:0;"
+        onkeydown="if(event.key==='Enter')checkPassword()" autofocus />
+    </div>
     <button class="pw-btn" onclick="checkPassword()">Unlock Dashboard</button>
     <div class="pw-error" id="pw-error"></div>
+    <div style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,0.08);font-size:0.73rem;color:rgba(255,255,255,0.3);line-height:1.6;">
+      The Apps Script URL is the <code style="background:rgba(255,255,255,0.08);padding:0.1rem 0.3rem;border-radius:3px">/exec</code> URL from your Google Apps Script deployment.<br>It's the same URL in <code style="background:rgba(255,255,255,0.08);padding:0.1rem 0.3rem;border-radius:3px">index.html</code>.
+    </div>
   </div>
 </div>
 
@@ -569,10 +583,11 @@
 
 <script>
   // ─────────────────────────────────────────────
-  // CONFIG — set this to your Apps Script URL
+  // URL is stored in sessionStorage — no file
+  // editing needed. Enter it at the login screen.
   // ─────────────────────────────────────────────
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw7_oAF-slbqn4T_IQJFdLf6ytMaxp73aKo0F1dIsMormckGdxnrtssaTp3ZFOuxTZgsQ/exec';
-  const isDemo = SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbw7_oAF-slbqn4T_IQJFdLf6ytMaxp73aKo0F1dIsMormckGdxnrtssaTp3ZFOuxTZgsQ/exec';
+  let SCRIPT_URL = sessionStorage.getItem('vnp_script_url') || '';
+  let isDemo = !SCRIPT_URL;
 
   // ── Category colours ──
   const CAT_COLORS = {
@@ -998,7 +1013,7 @@
   // ── Test Connection Modal ──
   function openTestModal() {
     document.getElementById('test-modal-overlay').classList.add('show');
-    document.getElementById('tm-url').textContent = isDemo ? '(not set — demo mode)' : SCRIPT_URL;
+    document.getElementById('tm-url').textContent = isDemo ? '(not set — running demo mode)' : SCRIPT_URL;
   }
   function closeTestModal() {
     document.getElementById('test-modal-overlay').classList.remove('show');
@@ -1047,28 +1062,59 @@
   const DASHBOARD_PASSWORD = 'vnphub2024';
 
   function checkPassword() {
-    const input = document.getElementById('pw-input');
-    const val   = input.value.trim();
-    if (val === DASHBOARD_PASSWORD) {
+    const pwInput  = document.getElementById('pw-input');
+    const urlInput = document.getElementById('url-input');
+    const pw       = pwInput.value.trim();
+    const url      = urlInput ? urlInput.value.trim() : '';
+    const errEl    = document.getElementById('pw-error');
+
+    // Validate URL if provided
+    if (url && !url.startsWith('https://script.google.com')) {
+      errEl.textContent = 'URL should start with https://script.google.com';
+      urlInput.classList.add('shake');
+      setTimeout(() => urlInput.classList.remove('shake'), 500);
+      return;
+    }
+
+    if (pw === DASHBOARD_PASSWORD) {
+      // Save URL to sessionStorage so it persists across refreshes
+      if (url) {
+        sessionStorage.setItem('vnp_script_url', url);
+        SCRIPT_URL = url;
+        isDemo = false;
+      } else {
+        // No URL entered — run in demo mode
+        isDemo = true;
+      }
       document.getElementById('pw-gate').style.display = 'none';
       document.getElementById('dashboard').style.display = 'flex';
       sessionStorage.setItem('vnp_auth', '1');
       loadAll();
     } else {
-      input.classList.remove('shake');
-      void input.offsetWidth;
-      input.classList.add('shake');
-      document.getElementById('pw-error').textContent = 'Incorrect password. Try again.';
-      input.value = '';
-      setTimeout(() => input.classList.remove('shake'), 500);
+      pwInput.classList.remove('shake');
+      void pwInput.offsetWidth;
+      pwInput.classList.add('shake');
+      errEl.textContent = 'Incorrect password. Try again.';
+      pwInput.value = '';
+      setTimeout(() => pwInput.classList.remove('shake'), 500);
     }
   }
 
   // ── Boot ──
   if (sessionStorage.getItem('vnp_auth') === '1') {
+    // Already authenticated this session — restore URL and go straight to dashboard
+    SCRIPT_URL = sessionStorage.getItem('vnp_script_url') || '';
+    isDemo = !SCRIPT_URL;
     document.getElementById('pw-gate').style.display = 'none';
     document.getElementById('dashboard').style.display = 'flex';
     loadAll();
+  } else {
+    // Pre-fill URL field if we have one saved
+    const saved = sessionStorage.getItem('vnp_script_url');
+    if (saved) {
+      const urlField = document.getElementById('url-input');
+      if (urlField) urlField.value = saved;
+    }
   }
 </script>
 
