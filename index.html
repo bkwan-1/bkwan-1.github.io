@@ -314,6 +314,80 @@
 
     footer { background: var(--navy); color: rgba(255,255,255,0.55); text-align: center; padding: 1.6rem; font-size: 0.83rem; }
     footer strong { color: white; }
+
+    /* ===== MOBILE RESPONSIVE ===== */
+    @media (max-width: 640px) {
+      /* Nav */
+      nav { padding: 0 1.1rem; height: 56px; }
+      .nav-brand-name { font-size: 0.88rem; }
+      .nav-links { gap: 0.9rem; }
+      .nav-link { font-size: 0.82rem; }
+      .btn-primary { padding: 0.45rem 0.85rem; font-size: 0.82rem; }
+
+      /* Hero */
+      .hero { padding: 4.5rem 1.2rem 4rem; }
+      .hero h1 { font-size: 2.1rem; }
+      .hero p { font-size: 1rem; margin-bottom: 1.8rem; }
+      .hero-search { flex-direction: row; border-radius: 50px; }
+      .hero-search input { padding: 0.85rem 0.8rem; font-size: 0.88rem; }
+      .hero-search button { padding: 0.85rem 1.2rem; font-size: 0.88rem; }
+
+      /* Stats */
+      .stats-inner { gap: 2.5rem; padding: 1rem 0; }
+      .stat-number { font-size: 2rem; }
+
+      /* Page hero (Browse/About/List) */
+      .page-hero { padding: 2.5rem 1.2rem 3rem; }
+      .page-hero h1 { font-size: 1.9rem; }
+      .page-hero p { font-size: 0.95rem; }
+
+      /* Categories */
+      .cat-section { padding: 3rem 1.2rem; }
+      .categories-grid { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+      .cat-card { padding: 1.3rem 0.75rem 1.1rem; }
+
+      /* Featured / Cards */
+      .featured-section { padding: 3rem 1.2rem; }
+      .nonprofit-grid { grid-template-columns: 1fr; gap: 1.1rem; }
+      .section-title { font-size: 1.7rem; }
+
+      /* CTA */
+      .cta-banner { padding: 3rem 1.2rem; }
+      .cta-banner h2 { font-size: 1.7rem; }
+
+      /* Browse page */
+      .browse-body { padding: 0 1.2rem; margin: 1.5rem auto; }
+      .filter-box { padding: 1.2rem; }
+      .filter-row { flex-direction: column; gap: 0.7rem; }
+      .search-input-wrap { min-width: unset; }
+      .filter-pills { gap: 0.4rem; }
+      .filter-pills button { font-size: 0.78rem; padding: 0.3rem 0.7rem; }
+
+      /* About page */
+      .about-body { padding: 2rem 1.2rem; }
+      .about-body h2 { font-size: 1.4rem; }
+      .values-grid { grid-template-columns: 1fr; }
+      .founders-grid { grid-template-columns: 1fr; }
+
+      /* List / Form page */
+      .form-body { padding: 0 1.2rem 3rem; margin: 1.5rem auto; }
+      .form-card { padding: 1.4rem; }
+      .form-row { grid-template-columns: 1fr; }
+
+      /* Org detail modal */
+      .org-modal { border-radius: 16px 16px 0 0; max-height: 96vh; width: 100%; }
+      .overlay { align-items: flex-end; }
+      .org-modal-body { padding: 1.2rem 1.2rem 2rem; }
+      .org-modal-header { flex-direction: column; align-items: flex-start; gap: 0.8rem; }
+      .org-modal-logo { width: 52px; height: 52px; }
+      .org-modal-header-text h2 { font-size: 1.25rem; }
+      .org-contact-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 400px) {
+      .hero h1 { font-size: 1.8rem; }
+      .nav-brand-name { display: none; }
+    }
   </style>
 </head>
 <body>
