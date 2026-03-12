@@ -2824,6 +2824,9 @@
     function handleImageUpload(input, type) {
       if (!input.files || !input.files[0]) return;
       const file = input.files[0];
+      const maxW = type === 'logo' ? 150 : 600;
+      const maxH = type === 'logo' ? 150 : 300;
+      compressImage(file, maxW, maxH, type === 'logo' ? 0.7 : 0.6).then(b64 => {
       const maxW = type === 'logo' ? 150 : 400;
       const maxH = type === 'logo' ? 150 : 200;
       const quality = type === 'logo' ? 0.7 : 0.5;
