@@ -634,6 +634,7 @@ function initFU() {
 ═════════════════════════════════════════════════════ */
 async function loadData() {
   try {
+    if (SHEET_ID === 'YOUR_GOOGLE_SHEET_ID') throw new Error('not configured');
     const url  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(TAB)}`;
     const res  = await fetch(url);
     const txt  = await res.text();
@@ -644,25 +645,16 @@ async function loadData() {
       .filter(r => r['Organization Name'] || r['Name']);
     ready = true;
   } catch {
-    data  = demoData();
+    // No demo data — start empty so only real submissions appear
+    data  = [];
     ready = true;
   }
   renderFeatured();
   renderBrowse();
   const s = document.getElementById('bSub');
-  if (s) s.textContent = `Explore ${data.length} organization${data.length!==1?'s':''} making a difference in Vancouver`;
-}
-
-/* ── DEMO DATA (shown when Sheet not yet connected) ── */
-function demoData() {
-  return [
-    { 'Organization Name':'Vancouver Green Initiative','Description':'Leading environmental conservation and urban greening projects across Metro Vancouver.','Mission':'To build a greener Vancouver for future generations.','Category':'Environment','Contact Email':'hello@vcgreen.org','Website':'https://example.org','Volunteer Opportunities':'Beach cleanups, tree planting, education workshops.','Logo URL':'','Cover Image URL':'','Location':'Kitsilano, Vancouver','Date Submitted':'2026-01-10' },
-    { 'Organization Name':'Youth Arts Collective','Description':'Providing free arts education and mentorship for youth aged 12–24 across Vancouver\'s most underserved neighbourhoods.','Mission':'Empower youth through creative expression.','Category':'Youth, Arts & Culture','Contact Email':'contact@youtharts.ca','Website':'https://example.org','Volunteer Opportunities':'Workshop facilitators, event coordinators, photographers.','Logo URL':'','Cover Image URL':'','Location':'East Vancouver','Date Submitted':'2026-01-18' },
-    { 'Organization Name':'Vancouver Food Bank Network','Description':'Distributing food to thousands of families in need every week across Greater Vancouver.','Mission':'No one in Vancouver should go hungry.','Category':'Food Security','Contact Email':'info@vcfoodbank.org','Website':'https://example.org','Volunteer Opportunities':'Food sorting, delivery drivers, warehouse volunteers.','Logo URL':'','Cover Image URL':'','Location':'Downtown Vancouver','Date Submitted':'2026-02-05' },
-    { 'Organization Name':'Indigenous Cultural Centre','Description':'Preserving and sharing Indigenous cultural heritage and traditions with the broader Vancouver community.','Mission':'To honour, preserve, and share Indigenous cultures and languages.','Category':'Indigenous, Arts & Culture','Contact Email':'info@iccvancouver.org','Website':'https://example.org','Volunteer Opportunities':'Event volunteers, cultural guides, admin support.','Logo URL':'','Cover Image URL':'','Location':'Grandview-Woodland','Date Submitted':'2026-02-14' },
-    { 'Organization Name':'Seniors Connect Society','Description':'Combating social isolation among Vancouver seniors through companion programs and community events.','Mission':'Every senior in Vancouver deserves connection and dignity.','Category':'Seniors, Community Services','Contact Email':'hello@seniorsconnect.ca','Website':'https://example.org','Volunteer Opportunities':'Companion visitors, tech tutors, event helpers.','Logo URL':'','Cover Image URL':'','Location':'Various Neighbourhoods','Date Submitted':'2026-03-01' },
-    { 'Organization Name':'Housing Rights Alliance','Description':'Advocating for affordable housing policy and supporting tenants facing eviction.','Mission':'Safe, stable housing is a human right for every Vancouverite.','Category':'Housing, Social Justice','Contact Email':'action@housingrightsbc.org','Website':'https://example.org','Volunteer Opportunities':'Legal support, outreach, community organizing.','Logo URL':'','Cover Image URL':'','Location':'Downtown Eastside','Date Submitted':'2026-03-08' },
-  ];
+  if (s) s.textContent = data.length
+    ? `Explore ${data.length} organization${data.length!==1?'s':''} making a difference in Vancouver`
+    : 'Be the first to list your nonprofit in Vancouver\'s directory';
 }
 
 /* ── HELPERS ── */
@@ -709,7 +701,15 @@ function card(row, idx) {
 /* ── FEATURED ── */
 function renderFeatured() {
   const el = document.getElementById('featGrid');
-  if (!data.length) { el.innerHTML=`<div class="empty" style="grid-column:1/-1"><p>No nonprofits listed yet — <span class="el" onclick="go('submit')">be the first to list yours!</span></p></div>`; return; }
+  if (!data.length) {
+    el.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:48px 20px">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e0" stroke-width="1.4" stroke-linecap="round" style="margin:0 auto 14px;display:block"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <p style="font-weight:600;color:#4a5568;margin-bottom:6px">No nonprofits listed yet</p>
+      <p style="font-size:.85rem;margin-bottom:14px">Be the first to add your organization to Vancouver's directory.</p>
+      <span class="el" onclick="go('submit')" style="font-size:.88rem">Register your nonprofit &rarr;</span>
+    </div>`;
+    return;
+  }
   el.innerHTML = data.slice(0,3).map((r,i)=>card(r,i)).join('');
   setTimeout(initFU, 60);
 }
@@ -735,8 +735,17 @@ function applyF() {
   else if (sort==='oldest') filtered.sort((a,b)=>(npd(a).date||'').localeCompare(npd(b).date||''));
   const grid = document.getElementById('bGrid'), count = document.getElementById('bCount');
   if (!filtered.length) {
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><p>No nonprofits found — <span class="el" onclick="go('submit')">be the first!</span></p></div>`;
-    count.innerHTML = 'Showing <strong>0</strong> nonprofits'; return;
+    const emptyMsg = data.length === 0
+      ? `<div class="empty" style="grid-column:1/-1;padding:52px 20px">
+           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e0" stroke-width="1.4" stroke-linecap="round" style="margin:0 auto 14px;display:block"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+           <p style="font-weight:600;color:#4a5568;margin-bottom:6px">No nonprofits listed yet</p>
+           <p style="font-size:.85rem;margin-bottom:14px">Be the first to add your organization to Vancouver's directory.</p>
+           <span class="el" onclick="go('submit')" style="font-size:.88rem">Register your nonprofit &rarr;</span>
+         </div>`
+      : `<div class="empty" style="grid-column:1/-1"><p>No nonprofits match your search — <span class="el" onclick="go('submit')">list yours!</span></p></div>`;
+    grid.innerHTML = emptyMsg;
+    count.innerHTML = 'Showing <strong>0</strong> nonprofits';
+    return;
   }
   grid.innerHTML = filtered.map(row=>card(row,data.indexOf(row))).join('');
   count.innerHTML = `Showing <strong>${filtered.length}</strong> nonprofit${filtered.length!==1?'s':''}`;
@@ -920,11 +929,44 @@ window.addEventListener('message', function(e) {
   }
 });
 
-/* ── Show success state ── */
+/* ── Show success state + add the new org to the live data array ── */
 function showSuccess(btn) {
   document.getElementById('sBanner').classList.add('show');
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  btn.innerHTML = '✓ Submitted';
+  btn.innerHTML = '&#10003; Submitted';
+
+  // Build a record from the form values and push it into the live data array
+  // so it appears immediately on Browse and Featured without a page reload.
+  const today = new Date().toISOString().split('T')[0];
+  const newOrg = {
+    'Organization Name':      document.getElementById('fn').value.trim(),
+    'Tagline':                document.getElementById('ft').value.trim(),
+    'Description':            document.getElementById('fd').value.trim(),
+    'Mission':                document.getElementById('fm').value.trim(),
+    'Category':               selCats().join(', '),
+    'Founded Year':           document.getElementById('fy').value.trim(),
+    'Contact Email':          document.getElementById('fe').value.trim(),
+    'Phone':                  document.getElementById('fph').value.trim(),
+    'Address':                document.getElementById('fa').value.trim(),
+    'Neighbourhood':          document.getElementById('fnh').value.trim(),
+    'Location':               document.getElementById('fnh').value.trim() || document.getElementById('fa').value.trim() || 'Vancouver, BC',
+    'Website':                document.getElementById('fw').value.trim(),
+    'Facebook':               document.getElementById('ffb').value.trim(),
+    'Instagram':              document.getElementById('fig').value.trim(),
+    'Twitter':                document.getElementById('ftw').value.trim(),
+    'LinkedIn':               document.getElementById('fli').value.trim(),
+    'Logo URL':               document.getElementById('flo').value.trim(),
+    'Cover Image URL':        document.getElementById('fco').value.trim(),
+    'Volunteer Opportunities':document.getElementById('fv').value.trim(),
+    'Date Submitted':         today,
+    'Status':                 'Pending',
+  };
+
+  // Add to top of array so it shows first
+  data.unshift(newOrg);
+  renderFeatured();
+  renderBrowse();
+
   // Reset form after 3.5 s
   setTimeout(() => {
     ['fn','ft','fd','fm','fy','fe','fph','fa','fnh','fw','ffb','fig','ftw','fli','flo','fco','fv']
