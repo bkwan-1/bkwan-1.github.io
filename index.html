@@ -598,11 +598,20 @@ footer{background:var(--blue);padding:20px 40px;text-align:center;border-top:1px
     <div class="mo-body">
       <div class="mo-tags"  id="moTags"></div>
       <h2 class="mo-name"  id="moName"></h2>
+      <p class="mo-tagline" id="moTagline" style="display:none;font-size:.93rem;color:var(--gray);margin:-4px 0 8px;font-style:italic"></p>
       <p  class="mo-loc"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span id="moLoc"></span></p>
       <div class="mo-sec"><div class="mo-lbl">About</div><div class="mo-text" id="moDesc"></div></div>
       <div class="mo-sec" id="moMisSec"><div class="mo-lbl">Mission</div><div class="mo-text" id="moMis"></div></div>
       <hr class="mo-hr"/>
-      <div class="mo-sec"><div class="mo-lbl">Volunteer Opportunities</div><div class="mo-text" id="moVol"></div></div>
+      <div class="mo-sec" id="moVolSec"><div class="mo-lbl">Volunteer Opportunities</div><div class="mo-text" id="moVol"></div></div>
+      <div class="mo-sec" id="moInfoSec" style="display:none">
+        <div class="mo-lbl">Organization Info</div>
+        <div id="moInfoGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:.85rem;color:var(--gray)"></div>
+      </div>
+      <div class="mo-sec" id="moSocialSec" style="display:none">
+        <div class="mo-lbl">Social &amp; Links</div>
+        <div id="moSocialLinks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
       <div class="mo-actions" id="moAct"></div>
     </div>
   </div>
@@ -656,7 +665,17 @@ function initFU() {
 /* ════════════════════════════════════════════════════
    DATA LOADING  (Google Sheets gviz endpoint)
 ═════════════════════════════════════════════════════ */
+/* ── localStorage helpers ── */
+const LS_KEY = 'vnph_submitted_orgs';
+function loadLocalOrgs() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+}
+function saveLocalOrgs(orgs) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(orgs)); } catch {}
+}
+
 async function loadData() {
+  const localOrgs = loadLocalOrgs();
   try {
     if (SHEET_ID === 'YOUR_GOOGLE_SHEET_ID') throw new Error('not configured');
     const url  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(TAB)}`;
@@ -667,10 +686,14 @@ async function loadData() {
     data = json.table.rows
       .map(r => { const o = {}; cols.forEach((c,i) => { o[c] = r.c && r.c[i] ? (r.c[i].v ?? '') : ''; }); return o; })
       .filter(r => r['Organization Name'] || r['Name']);
+    // Prepend locally-submitted orgs (deduplicate by name)
+    const sheetNames = new Set(data.map(r => (r['Organization Name']||r['Name']||'').toLowerCase()));
+    const newLocal = localOrgs.filter(r => !sheetNames.has((r['Organization Name']||'').toLowerCase()));
+    data = [...newLocal, ...data];
     ready = true;
   } catch {
-    // No demo data — start empty so only real submissions appear
-    data  = [];
+    // Fall back to only locally-submitted orgs
+    data  = [...localOrgs];
     ready = true;
   }
   renderFeatured();
@@ -684,17 +707,25 @@ async function loadData() {
 /* ── HELPERS ── */
 const gf = (row,...ks) => { for(const k of ks){const v=row[k];if(v!==undefined&&v!==null&&String(v).trim())return String(v).trim();}return ''; };
 const npd = row => ({
-  name:    gf(row,'Organization Name','Name'),
-  desc:    gf(row,'Description'),
-  mission: gf(row,'Mission','Mission Statement'),
-  cat:     gf(row,'Category','Categories'),
-  email:   gf(row,'Contact Email','Email'),
-  website: gf(row,'Website'),
-  vol:     gf(row,'Volunteer Opportunities','Volunteer Opps','Volunteer'),
-  logo:    gf(row,'Logo URL','Logo'),
-  cover:   gf(row,'Cover Image URL','Cover'),
-  loc:     gf(row,'Location','Neighbourhood','Address'),
-  date:    gf(row,'Date Submitted','Date'),
+  name:     gf(row,'Organization Name','Name'),
+  tagline:  gf(row,'Tagline'),
+  desc:     gf(row,'Description'),
+  mission:  gf(row,'Mission','Mission Statement'),
+  cat:      gf(row,'Category','Categories'),
+  founded:  gf(row,'Founded Year','Founded'),
+  email:    gf(row,'Contact Email','Email'),
+  phone:    gf(row,'Phone'),
+  address:  gf(row,'Address'),
+  website:  gf(row,'Website'),
+  facebook: gf(row,'Facebook'),
+  instagram:gf(row,'Instagram'),
+  twitter:  gf(row,'Twitter'),
+  linkedin: gf(row,'LinkedIn'),
+  vol:      gf(row,'Volunteer Opportunities','Volunteer Opps','Volunteer'),
+  logo:     gf(row,'Logo URL','Logo'),
+  cover:    gf(row,'Cover Image URL','Cover'),
+  loc:      gf(row,'Location','Neighbourhood','Address'),
+  date:     gf(row,'Date Submitted','Date'),
 });
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -803,11 +834,32 @@ function openMo(idx) {
   const cats=d.cat.split(',').map(s=>s.trim()).filter(Boolean);
   document.getElementById('moTags').innerHTML = cats.map(c=>`<span class="tag">${esc(c)}</span>`).join('');
   document.getElementById('moName').textContent = d.name;
+  // Tagline
+  const tgEl = document.getElementById('moTagline');
+  if (d.tagline) { tgEl.textContent = d.tagline; tgEl.style.display='block'; } else { tgEl.style.display='none'; }
   document.getElementById('moLoc').textContent  = d.loc||'Vancouver, BC';
   document.getElementById('moDesc').textContent = d.desc||'No description available.';
   document.getElementById('moMis').textContent  = d.mission;
   document.getElementById('moMisSec').style.display = d.mission?'block':'none';
   document.getElementById('moVol').textContent  = d.vol||'Contact the organization to learn about volunteer opportunities.';
+  // Info grid (founded, phone, address, email)
+  const infoItems = [];
+  if (d.founded)  infoItems.push(`<div><span style="font-weight:600;color:var(--black)">Founded:</span> ${esc(d.founded)}</div>`);
+  if (d.phone)    infoItems.push(`<div><span style="font-weight:600;color:var(--black)">Phone:</span> ${esc(d.phone)}</div>`);
+  if (d.address)  infoItems.push(`<div style="grid-column:1/-1"><span style="font-weight:600;color:var(--black)">Address:</span> ${esc(d.address)}</div>`);
+  if (d.email)    infoItems.push(`<div style="grid-column:1/-1"><span style="font-weight:600;color:var(--black)">Email:</span> <a href="mailto:${esc(d.email)}" style="color:var(--blue);text-decoration:underline">${esc(d.email)}</a></div>`);
+  const infoSec = document.getElementById('moInfoSec');
+  if (infoItems.length) { document.getElementById('moInfoGrid').innerHTML = infoItems.join(''); infoSec.style.display='block'; } else { infoSec.style.display='none'; }
+  // Social links
+  const socials = [];
+  if (d.website)  socials.push(`<a class="mo-btn-o" href="${esc(d.website)}" target="_blank" rel="noopener" style="font-size:.8rem;padding:6px 12px">🌐 Website</a>`);
+  if (d.facebook) socials.push(`<a class="mo-btn-o" href="${esc(d.facebook.startsWith('http')?d.facebook:'https://facebook.com/'+d.facebook)}" target="_blank" rel="noopener" style="font-size:.8rem;padding:6px 12px">Facebook</a>`);
+  if (d.instagram)socials.push(`<a class="mo-btn-o" href="${esc(d.instagram.startsWith('http')?d.instagram:'https://instagram.com/'+d.instagram)}" target="_blank" rel="noopener" style="font-size:.8rem;padding:6px 12px">Instagram</a>`);
+  if (d.twitter)  socials.push(`<a class="mo-btn-o" href="${esc(d.twitter.startsWith('http')?d.twitter:'https://twitter.com/'+d.twitter)}" target="_blank" rel="noopener" style="font-size:.8rem;padding:6px 12px">Twitter / X</a>`);
+  if (d.linkedin) socials.push(`<a class="mo-btn-o" href="${esc(d.linkedin.startsWith('http')?d.linkedin:'https://linkedin.com/in/'+d.linkedin)}" target="_blank" rel="noopener" style="font-size:.8rem;padding:6px 12px">LinkedIn</a>`);
+  const socialSec = document.getElementById('moSocialSec');
+  if (socials.length) { document.getElementById('moSocialLinks').innerHTML = socials.join(''); socialSec.style.display='block'; } else { socialSec.style.display='none'; }
+  // Action buttons
   let acts='';
   if (d.email)   acts+=`<button class="mo-btn-p" onclick="window.open('mailto:${esc(d.email)}?subject=Volunteer Inquiry','_blank')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Apply to Volunteer</button>`;
   if (d.website) acts+=`<a class="mo-btn-o" href="${esc(d.website)}" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Visit Website</a>`;
@@ -1003,6 +1055,10 @@ function showSuccess(btn) {
 
   // Add to top of array so it shows first
   data.unshift(newOrg);
+  // Persist to localStorage so it survives page refresh
+  const stored = loadLocalOrgs();
+  stored.unshift(newOrg);
+  saveLocalOrgs(stored);
   renderFeatured();
   renderBrowse();
 
