@@ -670,11 +670,23 @@ async function loadData() {
     }
     ready = true;
   } catch (err) {
-    console.error('Fetch Error:', err); // ← inspect this in DevTools to see the real failure
-    // On error, leave existing data intact so cards stay visible.
-    // Only mark ready=true if we actually have data or it's a config error —
-    // this keeps the "Loading…" state showing if the very first load fails with no data yet.
-    if (ready || data.length) ready = true;
+    console.error('Fetch Error:', err);
+    ready = true; // always clear the spinner, even on failure
+    if (!data.length) {
+      // First load failed — show a helpful error instead of spinning forever
+      const el = document.getElementById('featGrid');
+      if (el) el.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:48px 20px">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#e53e3e" stroke-width="1.6" stroke-linecap="round" style="margin:0 auto 14px;display:block"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <p style="font-weight:600;color:#4a5568;margin-bottom:6px">Couldn't load nonprofits</p>
+        <p style="font-size:.85rem;color:#718096;margin-bottom:6px">Make sure your Google Sheet is shared publicly:</p>
+        <p style="font-size:.82rem;color:#718096;margin-bottom:16px"><strong>Share → Anyone with the link → Viewer</strong></p>
+        <button onclick="loadData()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:.88rem;font-weight:600;cursor:pointer">Try Again</button>
+      </div>`;
+      const s = document.getElementById('bSub');
+      if (s) s.textContent = "Unable to load — check your Sheet sharing settings";
+      renderBrowse();
+      return;
+    }
   }
   renderFeatured();
   renderBrowse();
@@ -709,8 +721,10 @@ const npd = row => ({
 });
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-/* ── CARD TEMPLATE ── */
-function card(row, idx) {
+/* ── CARD TEMPLATE ──
+   Row data is embedded as a JSON data-attr so openMo() reads it directly
+   from the clicked element — no index lookup, no race conditions. ── */
+function card(row) {
   const d = npd(row);
   const cats = d.cat.split(',').map(s=>s.trim()).filter(Boolean).slice(0,2);
   const tags = cats.map(c=>`<span class="tag">${esc(c)}</span>`).join('');
@@ -719,7 +733,9 @@ function card(row, idx) {
     ? `<img src="${esc(d.logo)}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.nextSibling.style.display='flex'"/><div class="logo-ph" style="display:none;position:absolute;inset:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>`
     : `<div class="logo-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>`;
   const desc = d.desc.length>112 ? d.desc.slice(0,109)+'...' : d.desc;
-  return `<div class="np-card fu" onclick="openMo(${idx})">
+  // Encode row as JSON in a data-attribute — single-quoted attr, HTML-escaped content
+  const rowJson = JSON.stringify(row).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  return `<div class="np-card fu" data-row="${rowJson}" onclick="openMo(this)">
     <div class="np-card-cover">${cov}<div class="np-card-logo">${logo}</div></div>
     <div class="np-card-body">
       <div class="np-tags">${tags}</div>
@@ -747,7 +763,7 @@ function renderFeatured() {
     </div>`;
     return;
   }
-  el.innerHTML = data.slice(0,3).map((r,i)=>card(r,i)).join('');
+  el.innerHTML = data.slice(0,3).map(r=>card(r)).join('');
   setTimeout(initFU, 60);
 }
 
@@ -784,7 +800,7 @@ function applyF() {
     count.innerHTML = 'Showing <strong>0</strong> nonprofits';
     return;
   }
-  grid.innerHTML = filtered.map(row=>card(row,data.indexOf(row))).join('');
+  grid.innerHTML = filtered.map(row=>card(row)).join('');
   count.innerHTML = `Showing <strong>${filtered.length}</strong> nonprofit${filtered.length!==1?'s':''}`;
   setTimeout(initFU, 60);
 }
@@ -806,8 +822,11 @@ function hSearch() {
 }
 
 /* ── MODAL ── */
-function openMo(idx) {
-  const row = data[idx]; if (!row) return;
+function openMo(el) {
+  // Row data is embedded in the card element itself — immune to index/timing bugs
+  let row;
+  try { row = JSON.parse(el.getAttribute('data-row') || '{}'); } catch { row = {}; }
+  if (!row || !Object.keys(row).length) return;
   const d = npd(row);
   const ci=document.getElementById('moCovImg');
   if (d.cover){ci.src=d.cover;ci.style.display='block';}else{ci.style.display='none';}
@@ -920,15 +939,9 @@ async function submitForm() {
   btn.disabled = true;
   btn.innerHTML = '<div class="btn-spin"></div>Submitting...';
 
-  /* ── DEMO MODE ── */
-  if (GAS_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
-    setTimeout(() => showSuccess(btn), 1200);
-    return;
-  }
-
-  /* ── LIVE MODE: send as URL-encoded POST to GAS ── */
-  const today = new Date().toISOString().split('T')[0];
-  const payload = new URLSearchParams({
+  /* ── Snapshot ALL field values right now, before any async gap or navigation ── */
+  const today    = new Date().toISOString().split('T')[0];
+  const snapshot = {
     name:          document.getElementById('fn').value.trim(),
     tagline:       document.getElementById('ft').value.trim(),
     description:   document.getElementById('fd').value.trim(),
@@ -948,7 +961,16 @@ async function submitForm() {
     cover:         document.getElementById('fco').value.trim(),
     volunteer:     document.getElementById('fv').value.trim(),
     dateSubmitted: today,
-  });
+  };
+
+  /* ── DEMO MODE ── */
+  if (GAS_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+    setTimeout(() => showSuccess(btn, snapshot), 1200);
+    return;
+  }
+
+  /* ── LIVE MODE: send as URL-encoded POST to GAS ── */
+  const payload = new URLSearchParams(snapshot);
 
   try {
     // GAS doesn't support CORS so we use no-cors — we won't get a response body
@@ -960,7 +982,7 @@ async function submitForm() {
       body: payload.toString(),
     });
     // With no-cors we can't read the response, so assume success
-    showSuccess(btn);
+    showSuccess(btn, snapshot);
   } catch (err) {
     btn.disabled = false;
     btn.innerHTML = 'Submit Registration';
@@ -991,37 +1013,36 @@ function resetUploadZone(zoneId, fileId, previewId, hiddenId, label) {
 }
 
 /* ── Show success state + add new org to live data optimistically ── */
-function showSuccess(btn) {
+function showSuccess(btn, s) {
+  // s = snapshot object captured in submitForm() before any async gap
   window._submitDone = true;
 
   document.getElementById('sBanner').classList.add('show');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   btn.innerHTML = '&#10003; Submitted';
 
-  // Snapshot field values BEFORE the form reset clears them
-  const orgName = document.getElementById('fn').value.trim();
-  const today   = new Date().toISOString().split('T')[0];
-  const newOrg  = {
-    'Organization Name':       orgName,
-    'Tagline':                 document.getElementById('ft').value.trim(),
-    'Description':             document.getElementById('fd').value.trim(),
-    'Mission':                 document.getElementById('fm').value.trim(),
-    'Category':                selCats().join(', '),
-    'Founded Year':            document.getElementById('fy').value.trim(),
-    'Contact Email':           document.getElementById('fe').value.trim(),
-    'Phone':                   document.getElementById('fph').value.trim(),
-    'Address':                 document.getElementById('fa').value.trim(),
-    'Neighbourhood':           document.getElementById('fnh').value.trim(),
-    'Location':                document.getElementById('fnh').value.trim() || document.getElementById('fa').value.trim() || 'Vancouver, BC',
-    'Website':                 document.getElementById('fw').value.trim(),
-    'Facebook':                document.getElementById('ffb').value.trim(),
-    'Instagram':               document.getElementById('fig').value.trim(),
-    'Twitter':                 document.getElementById('ftw').value.trim(),
-    'LinkedIn':                document.getElementById('fli').value.trim(),
-    'Logo URL':                document.getElementById('flo').value.trim(),
-    'Cover Image URL':         document.getElementById('fco').value.trim(),
-    'Volunteer Opportunities': document.getElementById('fv').value.trim(),
-    'Date Submitted':          today,
+  // Build the org object from the snapshot — keys match npd() lookups exactly
+  const newOrg = {
+    'Organization Name':       s.name,
+    'Tagline':                 s.tagline,
+    'Description':             s.description,
+    'Mission':                 s.mission,
+    'Category':                s.categories,
+    'Founded Year':            s.founded,
+    'Contact Email':           s.email,
+    'Phone':                   s.phone,
+    'Address':                 s.address,
+    'Neighbourhood':           s.neighbourhood,
+    'Location':                s.neighbourhood || s.address || 'Vancouver, BC',
+    'Website':                 s.website,
+    'Facebook':                s.facebook,
+    'Instagram':               s.instagram,
+    'Twitter':                 s.twitter,
+    'LinkedIn':                s.linkedin,
+    'Logo URL':                s.logo,
+    'Cover Image URL':         s.cover,
+    'Volunteer Opportunities': s.volunteer,
+    'Date Submitted':          s.dateSubmitted,
     'Status':                  'Pending',
   };
 
@@ -1032,7 +1053,7 @@ function showSuccess(btn) {
 
   // Tell loadData() to preserve data[] until the Sheet contains this org.
   // Retries at 5s, 12s, 22s — once the Sheet has the row, data syncs from there.
-  _pendingOrgName = orgName;
+  _pendingOrgName = s.name;
   setTimeout(() => loadData(), 5000);
   setTimeout(() => loadData(), 12000);
   setTimeout(() => loadData(), 22000);
@@ -1042,7 +1063,7 @@ function showSuccess(btn) {
   // Auto-dismiss toast after 4s
   setTimeout(() => { document.getElementById('sBanner').classList.remove('show'); }, 4000);
 
-  // Reset form after 3.5s
+  // Reset form after 3.5s — safe because all values already snapshotted above
   setTimeout(() => {
     ['fn','ft','fd','fm','fy','fe','fph','fa','fnh','fw','ffb','fig','ftw','fli','flo','fco','fv']
       .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
