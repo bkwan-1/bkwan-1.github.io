@@ -554,35 +554,7 @@ footer{background:var(--blue);padding:20px 40px;text-align:center;border-top:1px
     </div>
   </div>
 
-  <!--
-    HIDDEN IFRAME + FORM — This is the mechanism that actually
-    sends data to Google Apps Script without CORS errors.
-    The form posts to the iframe (same as target="_blank" but invisible).
-    GAS responds with a tiny HTML page that calls postMessage({success:true}).
-    The message listener below catches it and shows the success banner.
-  -->
-  <iframe id="submitFrame" name="submitFrame" style="display:none" title="submit target"></iframe>
-  <form id="gasForm" method="POST" target="submitFrame" style="display:none">
-    <input type="hidden" name="name"          id="g_name"/>
-    <input type="hidden" name="tagline"       id="g_tagline"/>
-    <input type="hidden" name="description"   id="g_description"/>
-    <input type="hidden" name="mission"       id="g_mission"/>
-    <input type="hidden" name="categories"    id="g_categories"/>
-    <input type="hidden" name="founded"       id="g_founded"/>
-    <input type="hidden" name="email"         id="g_email"/>
-    <input type="hidden" name="phone"         id="g_phone"/>
-    <input type="hidden" name="address"       id="g_address"/>
-    <input type="hidden" name="neighbourhood" id="g_neighbourhood"/>
-    <input type="hidden" name="website"       id="g_website"/>
-    <input type="hidden" name="facebook"      id="g_facebook"/>
-    <input type="hidden" name="instagram"     id="g_instagram"/>
-    <input type="hidden" name="twitter"       id="g_twitter"/>
-    <input type="hidden" name="linkedin"      id="g_linkedin"/>
-    <input type="hidden" name="logo"          id="g_logo"/>
-    <input type="hidden" name="cover"         id="g_cover"/>
-    <input type="hidden" name="volunteer"     id="g_volunteer"/>
-    <input type="hidden" name="dateSubmitted" id="g_date"/>
-  </form>
+  <!-- No hidden form needed — submissions use fetch() directly to GAS -->
 
   <footer><p class="foot-text"><strong>Vancouver Nonprofit Hub</strong><span class="foot-sep">·</span>Connecting communities through the power of giving back<span class="foot-sep">·</span>Founded by Brandon Kwan &amp; Wallace Cheng</p></footer>
 </div>
@@ -623,8 +595,8 @@ footer{background:var(--blue);padding:20px 40px;text-align:center;border-top:1px
    GAS_URL  : the Web App URL from Apps Script Deploy
               https://script.google.com/macros/s/.../exec
    ═════════════════════════════════════════════════════ */
-const SHEET_ID = 'https://docs.google.com/spreadsheets/d/1I4jmY6MuY6f4VVUY8VgJmojd-1KzKPFDzC2PDGNqdzE/edit?gid=665774479#gid=665774479';
-const GAS_URL  = 'https://script.google.com/macros/s/AKfycbwFD8pDKNG3P_t1BecIYhSbea44O7u31VSQTIiyqx6evFWEJ6NCdQOAT8Hl_yQQa3ftIA/exec';
+const SHEET_ID = '1I4jmY6MuY6f4VVUY8VgJmojd-1KzKPFDzC2PDGNqdzE';
+const GAS_URL  = 'https://script.google.com/macros/s/AKfycbyr2URbZ9RWk-Wx149ocCZBR2hn9SfMkmef9g5UBp4J2RCEOTLK-5SIJ9iA3PA0bN56oQ/exec';
 const TAB      = 'Nonprofits';
 
 /* ── STATE ── */
@@ -853,20 +825,17 @@ function closeMo(){ document.getElementById('moOverlay').classList.remove('open'
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeMo(); });
 
 /* ════════════════════════════════════════════════════
-   FORM  — iframe POST submission to Google Apps Script
+   FORM  — fetch() POST submission to Google Apps Script
    ═════════════════════════════════════════════════════
    HOW IT WORKS:
-   1.  User clicks Submit.
-   2.  We validate the form fields.
-   3.  We copy all field values into the hidden <form id="gasForm">
-       which has  target="submitFrame"  (the hidden iframe).
-   4.  We set the form's action to GAS_URL and call form.submit().
-   5.  GAS receives the POST as  e.parameter.XXX  (no CORS issues
-       because it's a real HTML form submission, not fetch()).
-   6.  GAS writes the row to Sheets, then returns:
-         <script>window.parent.postMessage(JSON.stringify({success:true}),"*")<\/script>
-   7.  The message event listener below catches this, hides the
-       spinner, shows the success banner, and resets the form.
+   1.  User clicks Submit → validateForm() runs.
+   2.  submitForm() collects all field values into URLSearchParams.
+   3.  fetch(GAS_URL, { method:'POST', mode:'no-cors', body:payload })
+       sends the data. no-cors avoids CORS errors; GAS writes the row.
+   4.  showSuccess() is called immediately after fetch resolves.
+   5.  The new org is added to the local data array right away
+       (optimistic UI), then loadData() re-fetches from Sheets at
+       4s / 9s / 16s to sync the real saved data.
    ═════════════════════════════════════════════════════ */
 
 /* ── Category pill toggle ── */
@@ -908,99 +877,71 @@ function validateForm() {
 }
 
 /* ── Main submit function ── */
-function submitForm() {
+async function submitForm() {
   // Clear old banners
   document.getElementById('sBanner').classList.remove('show');
   document.getElementById('eBanner').classList.remove('show');
 
   if (!validateForm()) {
-    // Scroll to first error
     const firstErr = document.querySelector('.fc.err, .ferr.show');
     if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
 
   const btn = document.getElementById('subBtn');
-
-  /* ── DEMO MODE (GAS_URL not configured yet) ── */
-  if (GAS_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
-    btn.disabled = true;
-    btn.innerHTML = '<div class="btn-spin"></div>Submitting...';
-    setTimeout(() => {
-      showSuccess(btn);
-    }, 1200);
-    return;
-  }
-
-  /* ── LIVE MODE: populate hidden form and submit to iframe ── */
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('gasForm').action = GAS_URL;
-
-  // Map visible inputs → hidden form fields
-  const map = {
-    g_name:          document.getElementById('fn').value.trim(),
-    g_tagline:       document.getElementById('ft').value.trim(),
-    g_description:   document.getElementById('fd').value.trim(),
-    g_mission:       document.getElementById('fm').value.trim(),
-    g_categories:    selCats().join(', '),
-    g_founded:       document.getElementById('fy').value.trim(),
-    g_email:         document.getElementById('fe').value.trim(),
-    g_phone:         document.getElementById('fph').value.trim(),
-    g_address:       document.getElementById('fa').value.trim(),
-    g_neighbourhood: document.getElementById('fnh').value.trim(),
-    g_website:       document.getElementById('fw').value.trim(),
-    g_facebook:      document.getElementById('ffb').value.trim(),
-    g_instagram:     document.getElementById('fig').value.trim(),
-    g_twitter:       document.getElementById('ftw').value.trim(),
-    g_linkedin:      document.getElementById('fli').value.trim(),
-    g_logo:          document.getElementById('flo').value.trim(),
-    g_cover:         document.getElementById('fco').value.trim(),
-    g_volunteer:     document.getElementById('fv').value.trim(),
-    g_date:          today,
-  };
-  Object.entries(map).forEach(([id, val]) => { document.getElementById(id).value = val; });
-
-  // Set button to loading state
   btn.disabled = true;
   btn.innerHTML = '<div class="btn-spin"></div>Submitting...';
 
-  // Guard against double-firing (postMessage + fallback both triggering)
-  window._submitDone = false;
+  /* ── DEMO MODE ── */
+  if (GAS_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+    setTimeout(() => showSuccess(btn), 1200);
+    return;
+  }
 
-  // Fallback: if GAS never sends postMessage (e.g. ad blockers), show success after 8s
-  window._submitFallback = setTimeout(() => {
-    if (!window._submitDone) showSuccess(btn);
-  }, 8000);
+  /* ── LIVE MODE: send as URL-encoded POST to GAS ── */
+  const today = new Date().toISOString().split('T')[0];
+  const payload = new URLSearchParams({
+    name:          document.getElementById('fn').value.trim(),
+    tagline:       document.getElementById('ft').value.trim(),
+    description:   document.getElementById('fd').value.trim(),
+    mission:       document.getElementById('fm').value.trim(),
+    categories:    selCats().join(', '),
+    founded:       document.getElementById('fy').value.trim(),
+    email:         document.getElementById('fe').value.trim(),
+    phone:         document.getElementById('fph').value.trim(),
+    address:       document.getElementById('fa').value.trim(),
+    neighbourhood: document.getElementById('fnh').value.trim(),
+    website:       document.getElementById('fw').value.trim(),
+    facebook:      document.getElementById('ffb').value.trim(),
+    instagram:     document.getElementById('fig').value.trim(),
+    twitter:       document.getElementById('ftw').value.trim(),
+    linkedin:      document.getElementById('fli').value.trim(),
+    logo:          document.getElementById('flo').value.trim(),
+    cover:         document.getElementById('fco').value.trim(),
+    volunteer:     document.getElementById('fv').value.trim(),
+    dateSubmitted: today,
+  });
 
-  // Submit the form to the hidden iframe
-  document.getElementById('gasForm').submit();
-}
-
-/* ── Listen for the response from GAS via postMessage ── */
-window.addEventListener('message', function(e) {
-  if (!e.data) return;
-  let msg;
-  try { msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch { return; }
-
-  const btn = document.getElementById('subBtn');
-  if (!btn || !btn.disabled) return; // Not in a submission
-  if (window._submitDone) return;    // Already handled — block any duplicate calls
-
-  // GAS responded — cancel the fallback timer
-  if (window._submitFallback) { clearTimeout(window._submitFallback); window._submitFallback = null; }
-
-  if (msg.success) {
+  try {
+    // GAS doesn't support CORS so we use no-cors — we won't get a response body
+    // but the request still goes through and GAS writes the row.
+    await fetch(GAS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payload.toString(),
+    });
+    // With no-cors we can't read the response, so assume success
     showSuccess(btn);
-  } else {
-    window._submitDone = true;
+  } catch (err) {
     btn.disabled = false;
     btn.innerHTML = 'Submit Registration';
     const eb = document.getElementById('eBanner');
-    document.getElementById('eBannerText').textContent = msg.error || 'Something went wrong. Please try again.';
+    document.getElementById('eBannerText').textContent = 'Network error. Please check your connection and try again.';
     eb.classList.add('show');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-});
+}
 
 /* ── Reset an upload zone back to its empty state ── */
 function resetUploadZone(zoneId, fileId, previewId, hiddenId, label) {
