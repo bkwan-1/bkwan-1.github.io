@@ -596,7 +596,7 @@ footer{background:var(--blue);padding:20px 40px;text-align:center;border-top:1px
               https://script.google.com/macros/s/.../exec
    ═════════════════════════════════════════════════════ */
 const SHEET_ID = '1I4jmY6MuY6f4VVUY8VgJmojd-1KzKPFDzC2PDGNqdzE';
-const GAS_URL  = 'https://script.google.com/macros/s/AKfycby92rj5SvPEt2GFa7tiaugU2-WZoBQkIbJBEz_Y8TwSP01ibqr0lzubKkLZFj3n3zhOEg/exec';
+const GAS_URL  = 'https://script.google.com/macros/s/AKfycbwFD8pDKNG3P_t1BecIYhSbea44O7u31VSQTIiyqx6evFWEJ6NCdQOAT8Hl_yQQa3ftIA/exec';
 const TAB      = 'Nonprofits';
 
 /* ── STATE ── */
@@ -646,7 +646,13 @@ async function loadData() {
     const txt  = await res.text();
     const json = JSON.parse(txt.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);?\s*$/)[1]);
     const cols = json.table.cols.map(c => c.label.trim());
-    console.log('Detected Columns:', cols); // ← verify headers match what the code expects
+    console.log('Detected Columns:', cols);
+    if (json.table.rows.length) {
+      // Log first row's actual data so you can see exactly what keys+values arrived
+      const firstRow = {};
+      cols.forEach((c,i) => { firstRow[c] = json.table.rows[0].c && json.table.rows[0].c[i] ? (json.table.rows[0].c[i].v ?? '') : ''; });
+      console.log('First row data:', firstRow);
+    }
 
     // Determine which column holds the org name — fall back to first column if neither standard header is present
     const nameCol = cols.includes('Organization Name') ? 'Organization Name'
@@ -697,27 +703,41 @@ async function loadData() {
 }
 
 /* ── HELPERS ── */
-const gf = (row,...ks) => { for(const k of ks){const v=row[k];if(v!==undefined&&v!==null&&String(v).trim())return String(v).trim();}return ''; };
+// gf: get first matching key from a row object, case-insensitive + trimmed
+const gf = (row,...ks) => {
+  // Build a lowercase key map once per call for fuzzy matching
+  const lowerMap = {};
+  Object.keys(row).forEach(k => { lowerMap[k.toLowerCase().trim()] = k; });
+  for (const k of ks) {
+    // Try exact match first
+    if (row[k] !== undefined && row[k] !== null && String(row[k]).trim()) return String(row[k]).trim();
+    // Try case-insensitive match
+    const lk = k.toLowerCase().trim();
+    const realKey = lowerMap[lk];
+    if (realKey && row[realKey] !== undefined && row[realKey] !== null && String(row[realKey]).trim()) return String(row[realKey]).trim();
+  }
+  return '';
+};
 const npd = row => ({
-  name:     gf(row,'Organization Name','Name'),
-  tagline:  gf(row,'Tagline'),
-  desc:     gf(row,'Description'),
-  mission:  gf(row,'Mission','Mission Statement'),
-  cat:      gf(row,'Category','Categories'),
-  founded:  gf(row,'Founded Year','Founded'),
-  email:    gf(row,'Contact Email','Email'),
-  phone:    gf(row,'Phone'),
-  address:  gf(row,'Address'),
-  website:  gf(row,'Website'),
-  facebook: gf(row,'Facebook'),
-  instagram:gf(row,'Instagram'),
-  twitter:  gf(row,'Twitter'),
-  linkedin: gf(row,'LinkedIn'),
-  vol:      gf(row,'Volunteer Opportunities','Volunteer Opps','Volunteer'),
-  logo:     gf(row,'Logo URL','Logo'),
-  cover:    gf(row,'Cover Image URL','Cover'),
-  loc:      gf(row,'Location','Neighbourhood','Address'),
-  date:     gf(row,'Date Submitted','Date'),
+  name:     gf(row,'Organization Name','Name','Org Name','org_name','name'),
+  tagline:  gf(row,'Tagline','tagline','Subtitle','subtitle'),
+  desc:     gf(row,'Description','description','About','about','Desc','desc'),
+  mission:  gf(row,'Mission','Mission Statement','mission','mission_statement'),
+  cat:      gf(row,'Category','Categories','category','categories','Type','type'),
+  founded:  gf(row,'Founded Year','Founded','founded_year','founded','Year Founded'),
+  email:    gf(row,'Contact Email','Email','email','contact_email','Email Address'),
+  phone:    gf(row,'Phone','phone','Phone Number','Tel','tel'),
+  address:  gf(row,'Address','address','Street Address','Location Address'),
+  website:  gf(row,'Website','website','Website URL','Web','url','URL'),
+  facebook: gf(row,'Facebook','facebook','Facebook URL','FB'),
+  instagram:gf(row,'Instagram','instagram','Instagram URL','IG'),
+  twitter:  gf(row,'Twitter','twitter','Twitter URL','X','x'),
+  linkedin: gf(row,'LinkedIn','linkedin','LinkedIn URL'),
+  vol:      gf(row,'Volunteer Opportunities','Volunteer Opps','Volunteer','volunteer','Volunteering'),
+  logo:     gf(row,'Logo URL','Logo','logo_url','logo','Logo Image'),
+  cover:    gf(row,'Cover Image URL','Cover','cover_url','cover','Cover Image','Banner'),
+  loc:      gf(row,'Location','Neighbourhood','Neighborhood','neighbourhood','neighborhood','Address','address','City','city'),
+  date:     gf(row,'Date Submitted','Date','date_submitted','date','Submitted','Timestamp'),
 });
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
