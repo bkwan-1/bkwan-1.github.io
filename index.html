@@ -646,15 +646,22 @@ async function loadData() {
     const txt  = await res.text();
     const json = JSON.parse(txt.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);?\s*$/)[1]);
     const cols = json.table.cols.map(c => c.label.trim());
+    console.log('Detected Columns:', cols); // ← verify headers match what the code expects
+
+    // Determine which column holds the org name — fall back to first column if neither standard header is present
+    const nameCol = cols.includes('Organization Name') ? 'Organization Name'
+                  : cols.includes('Name')              ? 'Name'
+                  : cols[0] || 'Organization Name';    // flexible fallback
+
     const fresh = json.table.rows
       .map(r => { const o = {}; cols.forEach((c,i) => { o[c] = r.c && r.c[i] ? (r.c[i].v ?? '') : ''; }); return o; })
-      .filter(r => r['Organization Name'] || r['Name']);
+      .filter(r => r[nameCol] && String(r[nameCol]).trim()); // use resolved nameCol
 
     if (_pendingOrgName) {
       // Only replace data once the Sheet actually contains the just-submitted org.
       // This prevents the optimistic card from vanishing on early retries.
       const sheetHasIt = fresh.some(r =>
-        (r['Organization Name'] || r['Name'] || '').trim().toLowerCase() === _pendingOrgName.toLowerCase()
+        (r['Organization Name'] || r['Name'] || r[nameCol] || '').trim().toLowerCase() === _pendingOrgName.toLowerCase()
       );
       if (sheetHasIt) { _pendingOrgName = null; data = fresh; }
       // else: keep existing data[] — don't overwrite the optimistic entry
@@ -662,9 +669,12 @@ async function loadData() {
       data = fresh;
     }
     ready = true;
-  } catch {
-    // On error, leave existing data intact so cards stay visible
-    ready = true;
+  } catch (err) {
+    console.error('Fetch Error:', err); // ← inspect this in DevTools to see the real failure
+    // On error, leave existing data intact so cards stay visible.
+    // Only mark ready=true if we actually have data or it's a config error —
+    // this keeps the "Loading…" state showing if the very first load fails with no data yet.
+    if (ready || data.length) ready = true;
   }
   renderFeatured();
   renderBrowse();
@@ -727,6 +737,8 @@ function card(row, idx) {
 function renderFeatured() {
   const el = document.getElementById('featGrid');
   if (!data.length) {
+    // Still loading — keep the placeholder, don't replace with "no nonprofits" yet
+    if (!ready) return;
     el.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:48px 20px">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e0" stroke-width="1.4" stroke-linecap="round" style="margin:0 auto 14px;display:block"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <p style="font-weight:600;color:#4a5568;margin-bottom:6px">No nonprofits listed yet</p>
